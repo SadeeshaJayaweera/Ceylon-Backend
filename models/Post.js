@@ -17,7 +17,10 @@ const postSchema = new mongoose.Schema({
     email: String,
     uploaderName:String,
     pending: { type: Boolean },
-    imagePaths: [String],
+    imagePaths: [{
+        url: String,
+        public_id: String // Add this field
+    }],
     createdAt: { type: Date, default: Date.now }
 });
 

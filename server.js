@@ -8,6 +8,12 @@ const multer = require("multer");
 const path = require("path");
 const jwt = require("jsonwebtoken");
 const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+
+app.use(cors());
+app.use(bodyParser.json());
+app.use(express.json());
+
 
 // Import the Post model
 const Post = require('./models/Post');
@@ -15,31 +21,51 @@ const JWT_SECRET = 'Ab#12345@45awe';
 const ADMIN_EMAIL = 'admin@gmail.com';
 const ADMIN_PASSWORD = 'admin';
 
-app.use(express.json());
-app.use(cors());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+cloudinary.config({ 
+    cloud_name: 'dfccswjrx', 
+    api_key: '248122129376845', 
+    api_secret: 'ftw65Wle6pdRUe_1XIK6NZai1dk' 
+  });
 
-// Configure multer for file uploads
+// Multer setup
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/');
-    },
-    filename: (req, file, cb) => {
-        // Generate a unique iconic name based on current timestamp and a random string
-        const iconicName = Date.now() + '_' + Math.random().toString(36).substr(2, 9) + path.extname(file.originalname);
-        cb(null, iconicName);
-    },
-});
+    filename: function (req, file, cb) {
+      cb(null, file.originalname);
+    }
+  });
+const upload = multer({ storage: storage });
 
-const upload = multer({ storage });
 
-// API endpoint for uploading images
+
 app.post('/upload', upload.array('images', 3), async (req, res) => {
     try {
-        const imagePaths = req.files.map(file => file.path);
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).send({ message: 'No files were uploaded' });
+        }
 
+        const imagePaths = [];
+
+        // Upload each image to Cloudinary
+        for (const file of req.files) {
+            const result = await new Promise((resolve, reject) => {
+                cloudinary.uploader.upload(file.path, { folder: 'uploads' }, (error, result) => {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        resolve(result);
+                    }
+                });
+            });
+
+            // Store both the secure URL and public_id for each image
+            imagePaths.push({ url: result.secure_url, public_id: result.public_id });
+
+            // Optionally delete the file from local storage after upload
+            fs.unlinkSync(file.path);
+        }
+
+        // Create a new post with the form data and image paths
         const post = new Post({
-
             adTitle: req.body.adTitle,
             adDescription: req.body.adDescription,
             adpropertyType: req.body.adpropertyType,
@@ -56,13 +82,24 @@ app.post('/upload', upload.array('images', 3), async (req, res) => {
             imagePaths: imagePaths,
         });
 
+        // Save the post to the database
         await post.save();
 
+        // Send response indicating success
         res.status(201).send({ message: 'Images uploaded successfully', post });
     } catch (error) {
+        // Handle any errors that occur during image upload or database saving
+        console.error('Error uploading images:', error);
         res.status(500).send({ message: 'Error uploading images', error });
     }
 });
+
+
+
+
+
+
+
 
 // Api for conditions
 app.get('/posts', async (req, res) => {
@@ -199,13 +236,13 @@ app.delete('/posts/:id', authenticateJWT, async (req, res) => {
             return res.status(404).send({ message: 'Post not found' });
         }
         
-        // Delete associated images from the server
+        // Delete associated images from Cloudinary
         const imagePaths = deletedPost.imagePaths;
-        await Promise.all(imagePaths.map(async (imagePath) => {
+        await Promise.all(imagePaths.map(async (image) => {
             try {
-                await fs.promises.unlink(imagePath); // Use fs.promises.unlink to return a promise
+                await cloudinary.uploader.destroy(image.public_id); // Delete image from Cloudinary using public_id
             } catch (error) {
-                console.error('Error deleting image:', error);
+                console.error('Error deleting image from Cloudinary:', error);
                 throw error; // Rethrow the error to be caught by the catch block below
             }
         }));
@@ -215,6 +252,7 @@ app.delete('/posts/:id', authenticateJWT, async (req, res) => {
         res.status(500).send({ message: 'Error deleting post', error });
     }
 });
+
 
 // API for editing a post
 app.put('/posts/:id',authenticateJWT, async (req, res) => {
