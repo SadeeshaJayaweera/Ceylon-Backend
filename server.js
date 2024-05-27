@@ -18,8 +18,8 @@ app.use(express.json());
 // Import the Post model
 const Post = require('./models/Post');
 const JWT_SECRET = 'Ab#12345@45awe';
-const ADMIN_EMAIL = 'admin@gmail.com';
-const ADMIN_PASSWORD = 'admin';
+const ADMIN_EMAIL = 'yayabroadcast@outlook.com';
+const ADMIN_PASSWORD = 'yaya@YY4367';
 
 cloudinary.config({ 
     cloud_name: 'dfccswjrx', 
